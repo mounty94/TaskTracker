@@ -1,36 +1,56 @@
 import React, { useState, useEffect } from "react";
 import TaskList from "./TaskList"; // TaskList displays tasks
 import AddTaskForm from "./AddTaskForm"; // Form to add new tasks
+import AddProjectForm from "./AddProjectForm";
 import Task from "./Task"; // Task model
-import { Container } from "@mui/material";
+import Project from "./Project";
+import { Container, Typography, Box, Accordion, AccordionSummary, AccordionDetails } from "@mui/material";
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
 function App() {
   const [tasks, setTasks] = useState([]); // Holds tasks from the backend
+  const [projects, setProjects] = useState([]);
 
-  // Fetch tasks from Flask API when the app starts
+  // Fetch tasks and projects from Flask API when the app starts
   useEffect(() => {
     fetch("http://127.0.0.1:5000/tasks") // Connect to Flask backend
       .then((response) => response.json()) // Convert response to JSON
       .then((data) => setTasks(data)) // Set tasks state
       .catch((error) => console.error("Error fetching tasks:", error)); // Error handling
+
+    fetch("http://127.0.0.1:5000/projects")
+      .then((response) => response.json())
+      .then((data) => setProjects(data))
+      .catch((error) => console.error("Error fetching projects:", error));
   }, []); // Runs only once on component mount
 
-  // Add task function
-  const addTask = (newTaskName) => {
-    const newTask = new Task(newTaskName); // Create a new Task object
+  // Add project function
+  const addProject = (projectName) => {
+    fetch("http://127.0.0.1:5000/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: projectName }),
+    })
+      .then((response) => response.json())
+      .then((data) => {
+        setProjects([...projects, data]);
+      })
+      .catch((error) => console.error("Error adding project:", error));
+  };
 
-    // Add task to the backend via POST
+  // Add task function
+  const addTask = (taskName, projectId) => {
     fetch("http://127.0.0.1:5000/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newTask), // Send task as JSON
+      body: JSON.stringify({
+        name: taskName,
+        projectId: projectId
+      }),
     })
-      .then((response) => response.json()) // Get the response task data
+      .then((response) => response.json())
       .then((data) => {
-        setTasks([...tasks, data]); // Update state with new task
-
-        // Update the backend to start the timer (if needed, this step may be redundant since is_running is already true)
-        startTimer(data.id);
+        setTasks([...tasks, data]);
       })
       .catch((error) => console.error("Error adding task:", error));
   };
@@ -42,21 +62,30 @@ function App() {
       .catch((error) => console.error("Error deleting task:", error));
   };
 
-  //Toggle completion function
+  // Delete project function
+  const deleteProject = (projectId) => {
+    fetch(`http://127.0.0.1:5000/projects/${projectId}`, { method: "DELETE" })
+      .then(() => {
+        setProjects(projects.filter((project) => project.id !== projectId));
+        setTasks(tasks.filter((task) => task.projectId !== projectId));
+      })
+      .catch((error) => console.error("Error deleting project:", error));
+  };
+
+  // Toggle completion function
   const onToggleCompletion = (taskId, currentCompletion) => {
     fetch(`http://127.0.0.1:5000/tasks/${taskId}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ is_completed: !currentCompletion }), // Update only the "is_completed" field
+      body: JSON.stringify({ completed: !currentCompletion }),
     })
       .then((response) => response.json())
       .then((updatedTask) => {
-        // Update the React state to reflect the change
-        setTasks((prevTasks) =>
-          prevTasks.map((task) =>
-            task.id === updatedTask.id ? updatedTask : task
+        setTasks(
+          tasks.map((task) =>
+            task.id === taskId ? { ...task, completed: !currentCompletion } : task
           )
         );
       })
@@ -65,21 +94,32 @@ function App() {
 
   // Timer functionality
   const startTimer = (taskId) => {
-    const now = Date.now();
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+
+    const currentTime = task.time || 0;
+
     fetch(`http://127.0.0.1:5000/tasks/${taskId}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ is_running: true, last_updated: now }),
+      body: JSON.stringify({ 
+        is_running: true,
+        time: currentTime
+      }),
     })
       .then((response) => response.json())
-      .then((updatedTask) => {
+      .then(() => {
         setTasks((prevTasks) =>
-          prevTasks.map((task) =>
-            task.id === updatedTask.id
-              ? { ...updatedTask, last_updated: now }
-              : task
+          prevTasks.map((t) =>
+            t.id === taskId 
+              ? { 
+                  ...t, 
+                  is_running: true,
+                  time: currentTime
+                } 
+              : t
           )
         );
       })
@@ -87,26 +127,32 @@ function App() {
   };
 
   const stopTimer = (taskId) => {
-    const now = Date.now();
     const taskToStop = tasks.find((task) => task.id === taskId);
+    if (!taskToStop) return;
 
-    const elapsedTime = Math.floor(
-      (now - new Date(taskToStop.last_updated).getTime()) / 1000
-    );
-    const updatedTime = taskToStop.time + elapsedTime;
+    const currentTime = taskToStop.time || 0;
 
     fetch(`http://127.0.0.1:5000/tasks/${taskId}`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ is_running: false, time: updatedTime }),
+      body: JSON.stringify({ 
+        is_running: false,
+        time: currentTime
+      }),
     })
       .then((response) => response.json())
-      .then((updatedTask) => {
+      .then(() => {
         setTasks((prevTasks) =>
           prevTasks.map((task) =>
-            task.id === updatedTask.id ? updatedTask : task
+            task.id === taskId 
+              ? { 
+                  ...task, 
+                  is_running: false,
+                  time: currentTime
+                } 
+              : task
           )
         );
       })
@@ -116,27 +162,12 @@ function App() {
   // Update timer every second
   useEffect(() => {
     const interval = setInterval(() => {
-      const now = Date.now();
       setTasks((prevTasks) =>
         prevTasks.map((task) => {
           if (task.is_running) {
-            console.log(new Date(task.last_updated).getTime());
-            const lastUpdatedTime = new Date(task.last_updated).getTime();
-            const elapsedTime = Math.floor((now - lastUpdatedTime) / 1000);
-            console.log(
-              "Task:",
-              task.id,
-              "Now:",
-              now,
-              "Last Updated:",
-              lastUpdatedTime,
-              "Elapsed Time:",
-              elapsedTime
-            );
             return {
               ...task,
-              time: task.time + elapsedTime,
-              last_updated: now, // Update last_updated to current time
+              time: (task.time || 0) + 1
             };
           }
           return task;
@@ -144,23 +175,62 @@ function App() {
       );
     }, 1000);
 
-    return () => clearInterval(interval); // Cleanup
-  }, [tasks]);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
-    <Container maxWidth="lg">
-      <h1>Hello, Mountasser</h1>
-      <h1>Task Planner</h1>
-      {/* Add new task form */}
-      <AddTaskForm onAdd={addTask} onStartTimer={startTimer} />
-      {/* Show tasklist with tasItem template*/}
-      <TaskList
-        tasks={tasks}
-        onDelete={deleteTask}
-        onStart={startTimer}
-        onStop={stopTimer}
-        onToggleCompletion={onToggleCompletion}
-      />
+    <Container maxWidth="md" sx={{ mt: 4 }}>
+      <Typography variant="h4" component="h1" gutterBottom>
+        Task Tracker
+      </Typography>
+
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h6" gutterBottom>
+          Add New Project
+        </Typography>
+        <AddProjectForm onAddProject={addProject} />
+      </Box>
+
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h6" gutterBottom>
+          Add New Task
+        </Typography>
+        <AddTaskForm onAddTask={addTask} projects={projects} />
+      </Box>
+
+      <Typography variant="h6" gutterBottom>
+        Projects and Tasks
+      </Typography>
+
+      {projects.map((project) => (
+        <Accordion key={project.id}>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography>{project.name}</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <TaskList
+              tasks={tasks.filter((task) => task.projectId === project.id)}
+              onDelete={deleteTask}
+              onToggleCompletion={onToggleCompletion}
+              onStart={startTimer}
+              onStop={stopTimer}
+            />
+          </AccordionDetails>
+        </Accordion>
+      ))}
+
+      <Box sx={{ mt: 4 }}>
+        <Typography variant="h6" gutterBottom>
+          Tasks without Project
+        </Typography>
+        <TaskList
+          tasks={tasks.filter((task) => !task.projectId)}
+          onDelete={deleteTask}
+          onToggleCompletion={onToggleCompletion}
+          onStart={startTimer}
+          onStop={stopTimer}
+        />
+      </Box>
     </Container>
   );
 }
