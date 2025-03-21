@@ -1,74 +1,53 @@
 import React, { useState } from "react";
-import Paper from "@mui/material/Paper";
-import InputBase from "@mui/material/InputBase";
-import IconButton from "@mui/material/IconButton";
-import PlayCircleIcon from "@mui/icons-material/PlayCircle";
+import { TextField, Button, Box, Select, MenuItem, FormControl, InputLabel } from "@mui/material";
 
-function AddTaskForm({ onAdd, onStartTimer }) {
-  const [newTask, setNewTask] = useState("");
+function AddTaskForm({ onAddTask, projects }) {
+  const [taskName, setTaskName] = useState("");
+  const [selectedProject, setSelectedProject] = useState("");
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
-
-    if (newTask.trim()) {
-      // Call onAdd and get the new task ID
-      const newTaskId = await onAdd(newTask);
-
-      if (newTaskId) {
-        // Start the timer for the newly created task
-        onStartTimer(newTaskId);
-      }
-
-      setNewTask(""); // Clear the input field
+    if (taskName.trim()) {
+      onAddTask(taskName, selectedProject);
+      setTaskName("");
     }
   };
 
-  // function AddTaskForm({ onAdd, onStartTimer }) {
-  //   const [newTask, setNewTask] = useState("");
-
-  //   // Submit handler for adding tasks
-  //   const handleSubmit = (e) => {
-  //     e.preventDefault(); // Prevent default form submission
-  //     if (newTask.trim() !== "") {
-  //       onAdd(newTask); // Call parent function
-  //       // Optionally trigger the timer logic here
-  //       setTimeout(() => {
-  //         const taskId = 1; // Get the actual task ID from your backend's response logic if needed
-  //         onStartTimer(taskId);
-  //       }, 500); // Delay to ensure the task is added before starting the timer
-
-  //       setNewTask(""); // Reset input
-  //     }
-  //   };
-
   return (
-    <div>
-      <Paper
-        component="div" // Changed to div to avoid form nesting conflict
-        sx={{
-          p: "2px 4px",
-          display: "flex",
-          alignItems: "center",
-          marginTop: "16px", // Add spacing between the two elements
-          width: 400,
-        }}
-      >
-        <InputBase
-          sx={{ ml: 1, flex: 1 }}
-          placeholder="Start a task"
-          inputProps={{ "aria-label": "start a task" }}
-          value={newTask}
-          onChange={(e) => setNewTask(e.target.value)}
-        />
-        <IconButton
-          sx={{ p: "10px" }}
-          aria-label="start timer"
-          onClick={handleSubmit} // Correctly bind the handleSubmit function
+    <Box component="form" onSubmit={handleSubmit} sx={{ mb: 3 }}>
+      <TextField
+        fullWidth
+        label="Task Name"
+        value={taskName}
+        onChange={(e) => setTaskName(e.target.value)}
+        margin="normal"
+        variant="outlined"
+      />
+      <FormControl fullWidth margin="normal">
+        <InputLabel>Project</InputLabel>
+        <Select
+          value={selectedProject}
+          onChange={(e) => setSelectedProject(e.target.value)}
+          label="Project"
         >
-          <PlayCircleIcon />
-        </IconButton>
-      </Paper>
-    </div>
+          <MenuItem value="">No Project</MenuItem>
+          {projects.map((project) => (
+            <MenuItem key={project.id} value={project.id}>
+              {project.name}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+      <Button
+        type="submit"
+        variant="contained"
+        color="primary"
+        sx={{ mt: 1 }}
+        disabled={!taskName.trim()}
+      >
+        Add Task
+      </Button>
+    </Box>
   );
 }
 
