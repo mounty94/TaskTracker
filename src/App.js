@@ -4,18 +4,21 @@ import AddTaskForm from "./AddTaskForm"; // Form to add new tasks
 import AddProjectForm from "./AddProjectForm";
 import Task from "./Task"; // Task model
 import Project from "./Project";
-import { Container, Typography, Box, Accordion, AccordionSummary, AccordionDetails, TextField, Button, List, ListItem, ListItemText, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Paper, Grid } from "@mui/material";
+import { Container, Typography, Box, Accordion, AccordionSummary, AccordionDetails, TextField, Button, List, ListItem, ListItemText, IconButton, Dialog, DialogTitle, DialogContent, DialogActions, Paper, Grid, Tabs, Tab, ListItemSecondaryAction } from "@mui/material";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { Delete as DeleteIcon, Info as InfoIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Info as InfoIcon, Add as AddIcon, PlayArrow as PlayIcon, Stop as StopIcon } from '@mui/icons-material';
 import ProjectDetails from './components/ProjectDetails';
 
 function App() {
   const [tasks, setTasks] = useState([]); // Holds tasks from the backend
   const [projects, setProjects] = useState([]);
   const [newProjectName, setNewProjectName] = useState('');
+  const [newTaskName, setNewTaskName] = useState('');
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState(null);
   const [selectedProject, setSelectedProject] = useState(null);
+  const [projectDetailsOpen, setProjectDetailsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
 
   // Fetch tasks and projects from Flask API when the app starts
   useEffect(() => {
@@ -67,23 +70,21 @@ function App() {
   };
 
   // Add task function
-  const addTask = async (taskName, projectId) => {
+  const addTask = async () => {
+    if (!newTaskName.trim()) return;
     try {
       const response = await fetch("http://127.0.0.1:5000/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: taskName,
-          projectId: projectId,
-          description: "",
-          completed: false,
-          time: 0,
-          is_running: false
+          title: newTaskName,
+          projectId: null,
         }),
       });
       if (response.ok) {
         const newTask = await response.json();
         setTasks([...tasks, newTask]);
+        setNewTaskName('');
       }
     } catch (error) {
       console.error("Error adding task:", error);
@@ -91,10 +92,17 @@ function App() {
   };
 
   // Delete task function
-  const deleteTask = (taskId) => {
-    fetch(`http://127.0.0.1:5000/tasks/${taskId}`, { method: "DELETE" }) // Send DELETE request
-      .then(() => setTasks(tasks.filter((task) => task.id !== taskId))) // Remove from state
-      .catch((error) => console.error("Error deleting task:", error));
+  const deleteTask = async (taskId) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:5000/tasks/${taskId}`, {
+        method: "DELETE"
+      });
+      if (response.ok) {
+        setTasks(tasks.filter((task) => task.id !== taskId));
+      }
+    } catch (error) {
+      console.error("Error deleting task:", error);
+    }
   };
 
   // Delete project function
@@ -132,70 +140,44 @@ function App() {
   };
 
   // Timer functionality
-  const startTimer = (taskId) => {
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
-
-    const currentTime = task.time || 0;
-
-    fetch(`http://127.0.0.1:5000/tasks/${taskId}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ 
-        is_running: true,
-        time: currentTime
-      }),
-    })
-      .then((response) => response.json())
-      .then(() => {
-        setTasks((prevTasks) =>
-          prevTasks.map((t) =>
-            t.id === taskId 
-              ? { 
-                  ...t, 
-                  is_running: true,
-                  time: currentTime
-                } 
-              : t
-          )
-        );
-      })
-      .catch((error) => console.error("Error updating task:", error));
+  const startTimer = async (taskId) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:5000/tasks/${taskId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ is_running: true }),
+      });
+      if (response.ok) {
+        const updatedTask = await response.json();
+        setTasks(tasks.map(task => 
+          task.id === taskId ? updatedTask : task
+        ));
+      }
+    } catch (error) {
+      console.error("Error starting timer:", error);
+    }
   };
 
-  const stopTimer = (taskId) => {
-    const taskToStop = tasks.find((task) => task.id === taskId);
-    if (!taskToStop) return;
-
-    const currentTime = taskToStop.time || 0;
-
-    fetch(`http://127.0.0.1:5000/tasks/${taskId}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ 
-        is_running: false,
-        time: currentTime
-      }),
-    })
-      .then((response) => response.json())
-      .then(() => {
-        setTasks((prevTasks) =>
-          prevTasks.map((task) =>
-            task.id === taskId 
-              ? { 
-                  ...task, 
-                  is_running: false,
-                  time: currentTime
-                } 
-              : task
-          )
-        );
-      })
-      .catch((error) => console.error("Error updating task:", error));
+  const stopTimer = async (taskId) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:5000/tasks/${taskId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ is_running: false }),
+      });
+      if (response.ok) {
+        const updatedTask = await response.json();
+        setTasks(tasks.map(task => 
+          task.id === taskId ? updatedTask : task
+        ));
+      }
+    } catch (error) {
+      console.error("Error stopping timer:", error);
+    }
   };
 
   // Update timer every second
@@ -219,6 +201,18 @@ function App() {
 
   const handleViewProject = (project) => {
     setSelectedProject(project);
+    setProjectDetailsOpen(true);
+  };
+
+  const formatTime = (seconds) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainingSeconds = seconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
   };
 
   return (
@@ -227,97 +221,135 @@ function App() {
         Task Tracker
       </Typography>
 
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h6" gutterBottom>
-          Add New Project
-        </Typography>
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs>
-              <TextField
-                fullWidth
-                label="New Project Name"
-                value={newProjectName}
-                onChange={(e) => setNewProjectName(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleAddProject()}
-              />
-            </Grid>
-            <Grid item>
-              <Button
-                variant="contained"
-                onClick={handleAddProject}
-                disabled={!newProjectName.trim()}
-              >
-                Add Project
-              </Button>
-            </Grid>
-          </Grid>
-        </Paper>
-      </Box>
+      <Tabs value={activeTab} onChange={handleTabChange} sx={{ mb: 3 }}>
+        <Tab label="Projects" />
+        <Tab label="All Tasks" />
+      </Tabs>
 
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h6" gutterBottom>
-          Add New Task
-        </Typography>
-        <AddTaskForm onAddTask={addTask} projects={projects} />
-      </Box>
-
-      <Typography variant="h6" gutterBottom>
-        Projects and Tasks
-      </Typography>
-
-      <Paper sx={{ p: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Projects
-        </Typography>
-        <List>
-          {projects.map((project) => (
-            <ListItem
-              key={project.id}
-              secondaryAction={
-                <Box>
-                  <IconButton
-                    edge="end"
-                    aria-label="view"
-                    onClick={() => handleViewProject(project)}
-                    sx={{ mr: 1 }}
+      {activeTab === 0 ? (
+        <>
+          <Box sx={{ mb: 4 }}>
+            <Typography variant="h6" gutterBottom>
+              Add New Project
+            </Typography>
+            <Paper sx={{ p: 3, mb: 3 }}>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs>
+                  <TextField
+                    fullWidth
+                    label="New Project Name"
+                    value={newProjectName}
+                    onChange={(e) => setNewProjectName(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleAddProject()}
+                  />
+                </Grid>
+                <Grid item>
+                  <Button
+                    variant="contained"
+                    onClick={handleAddProject}
+                    disabled={!newProjectName.trim()}
                   >
-                    <InfoIcon />
-                  </IconButton>
-                  <IconButton
-                    edge="end"
-                    aria-label="delete"
-                    onClick={() => {
-                      setProjectToDelete(project);
-                      setOpenDeleteDialog(true);
-                    }}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </Box>
-              }
-            >
-              <ListItemText
-                primary={project.name}
-                secondary={`Status: ${project.status} | Tasks: ${project.tasks?.length || 0}`}
-              />
-            </ListItem>
-          ))}
-        </List>
-      </Paper>
+                    Add Project
+                  </Button>
+                </Grid>
+              </Grid>
+            </Paper>
+          </Box>
 
-      <Box sx={{ mt: 4 }}>
-        <Typography variant="h6" gutterBottom>
-          Tasks without Project
-        </Typography>
-        <TaskList
-          tasks={tasks.filter((task) => !task.projectId)}
-          onDelete={deleteTask}
-          onToggleCompletion={onToggleCompletion}
-          onStart={startTimer}
-          onStop={stopTimer}
-        />
-      </Box>
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              Projects
+            </Typography>
+            <List>
+              {projects.map((project) => (
+                <ListItem
+                  key={project.id}
+                  secondaryAction={
+                    <Box>
+                      <IconButton
+                        edge="end"
+                        aria-label="view"
+                        onClick={() => handleViewProject(project)}
+                        sx={{ mr: 1 }}
+                      >
+                        <InfoIcon />
+                      </IconButton>
+                      <IconButton
+                        edge="end"
+                        aria-label="delete"
+                        onClick={() => {
+                          setProjectToDelete(project);
+                          setOpenDeleteDialog(true);
+                        }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Box>
+                  }
+                >
+                  <ListItemText
+                    primary={project.name}
+                    secondary={`Status: ${project.status} | Tasks: ${project.tasks?.length || 0}`}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
+        </>
+      ) : (
+        <>
+          <Box sx={{ mb: 4 }}>
+            <Typography variant="h6" gutterBottom>
+              Add New Task
+            </Typography>
+            <AddTaskForm onAddTask={addTask} projects={projects} />
+          </Box>
+
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              Tasks
+            </Typography>
+            <List>
+              {tasks.map((task) => (
+                <ListItem key={task.id}>
+                  <ListItemText
+                    primary={task.title}
+                    secondary={`Project: ${projects.find(p => p.id === task.projectId)?.name || 'No Project'} | Time: ${formatTime(task.time)}`}
+                  />
+                  <ListItemSecondaryAction>
+                    {task.is_running ? (
+                      <IconButton
+                        edge="end"
+                        color="error"
+                        onClick={() => stopTimer(task.id)}
+                        sx={{ mr: 1 }}
+                      >
+                        <StopIcon />
+                      </IconButton>
+                    ) : (
+                      <IconButton
+                        edge="end"
+                        color="primary"
+                        onClick={() => startTimer(task.id)}
+                        sx={{ mr: 1 }}
+                      >
+                        <PlayIcon />
+                      </IconButton>
+                    )}
+                    <IconButton
+                      edge="end"
+                      color="error"
+                      onClick={() => deleteTask(task.id)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
+        </>
+      )}
 
       <Dialog
         open={openDeleteDialog}
@@ -342,19 +374,17 @@ function App() {
       </Dialog>
 
       <Dialog
-        open={!!selectedProject}
-        onClose={() => setSelectedProject(null)}
+        open={projectDetailsOpen}
+        onClose={() => setProjectDetailsOpen(false)}
         maxWidth="md"
         fullWidth
       >
-        <DialogContent>
-          {selectedProject && (
-            <ProjectDetails
-              projectId={selectedProject.id}
-              onClose={() => setSelectedProject(null)}
-            />
-          )}
-        </DialogContent>
+        {selectedProject && (
+          <ProjectDetails
+            projectId={selectedProject.id}
+            onClose={() => setProjectDetailsOpen(false)}
+          />
+        )}
       </Dialog>
     </Container>
   );
